@@ -1,0 +1,22 @@
+[package]
+name = "beyond-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+members=[
+    "./crates/b-cli",
+    "./crates/b-core"
+]
+
+[dependencies]
+b-cli = {path = "./crates/b-cli", version="0.0.0"}
+b-core = {path = "./crates/b-core", version="0.0.0"}
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
