@@ -11,3 +11,4 @@ rayon = "1.5"
 anyhow = "1.0.53"
 serde_json = "1.0.78"
 serde = {features = ["derive"], version = "1.0.136"}
+crossbeam-channel = "0.5"

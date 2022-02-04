@@ -1,10 +1,9 @@
 use crate::optimize::Action;
 use anyhow::Result;
-use rayon::prelude::*;
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::prelude::*;
-use std::{collections::HashMap, fmt::Debug, fs::OpenOptions, thread};
+use std::{collections::HashMap, fmt::Debug, fs::OpenOptions};
 
 const DOMAINS: &[&str] = &[
     "github.githubassets.com",
@@ -40,16 +39,16 @@ const DOMAINS: &[&str] = &[
     "stackoverflow.com",
 ];
 
-fn op() -> Vec<NewHost<'static>> {
-    DOMAINS
-        .par_iter()
-        .map(|host| {
-            let h = detect(host);
-            println!("[{:?}],{},{}", thread::current().id(), h.ip, h.host);
-            h
-        })
-        .collect()
-}
+// fn op() -> Vec<NewHost<'static>> {
+//     DOMAINS
+//         .par_iter()
+//         .map(move |host| {
+//             let h = detect(host);
+//             println!("[{:?}],{},{}", thread::current().id(), h.ip, h.host);
+//             h
+//         })
+//         .collect()
+// }
 
 struct NewHost<'a> {
     ip: String,
@@ -79,14 +78,27 @@ impl Action for DnsOp {
     }
 
     fn execute(&self) -> anyhow::Result<()> {
-        let r = op();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        for ele in DOMAINS {
+            let tx = tx.clone();
+            pool.spawn(move || {
+                tx.send(detect(ele)).unwrap();
+            });
+        }
+        drop(tx);
+        let r: Vec<NewHost> = rx.into_iter().collect();
+        // let r = op();
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
             .append(true) // <--------- this
             .open("/etc/hosts")?;
 
-        writeln!(file, "## [beyond] dns start")?;
+        writeln!(file, "\n## [beyond] dns start")?;
         for ele in r {
             if !ele.ip.eq("-1") {
                 writeln!(file, "{} {}", ele.ip, ele.host)?;
@@ -135,6 +147,7 @@ impl Detect for Myssl {
         });
 
         let ip = answers[0].records[0]["value"].as_str().unwrap();
+        println!("[{:?}],{},{}", std::thread::current().id(), &ip, &str);
         Ok(NewHost::new(String::from(ip), str))
     }
 }

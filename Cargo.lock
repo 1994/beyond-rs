@@ -37,6 +37,7 @@ name = "b-core"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "crossbeam-channel",
  "rayon",
  "reqwest",
  "serde",
