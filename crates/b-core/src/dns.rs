@@ -1,5 +1,6 @@
 use crate::optimize::Action;
 use anyhow::Result;
+use core::panic;
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::prelude::*;
@@ -37,6 +38,7 @@ const DOMAINS: &[&str] = &[
     "github.community",
     "media.githubusercontent.com",
     "stackoverflow.com",
+    "ajax.googleapis.com",
 ];
 
 // fn op() -> Vec<NewHost<'static>> {
@@ -50,12 +52,12 @@ const DOMAINS: &[&str] = &[
 //         .collect()
 // }
 
-struct NewHost<'a> {
+struct NewHost {
     ip: String,
-    host: &'a str,
+    host: String,
 }
 
-impl<'a> Debug for NewHost<'a> {
+impl Debug for NewHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NewHost")
             .field("ip", &self.ip)
@@ -63,9 +65,12 @@ impl<'a> Debug for NewHost<'a> {
             .finish()
     }
 }
-impl<'a> NewHost<'a> {
-    fn new<'b>(ip: String, host: &'b str) -> NewHost<'b> {
-        NewHost { ip, host }
+impl NewHost {
+    fn new(ip: &str, host: &str) -> NewHost {
+        NewHost {
+            ip: String::from(ip),
+            host: String::from(host),
+        }
     }
 }
 
@@ -91,26 +96,31 @@ impl Action for DnsOp {
         }
         drop(tx);
         let r: Vec<NewHost> = rx.into_iter().collect();
-        // let r = op();
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .append(true) // <--------- this
-            .open("/etc/hosts")?;
 
-        writeln!(file, "\n## [beyond] dns start")?;
-        for ele in r {
-            if !ele.ip.eq("-1") {
-                writeln!(file, "{} {}", ele.ip, ele.host)?;
+        if let Ok(host) = get_host() {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .append(true) // <--------- this
+                .open(host)?;
+
+            writeln!(file, "\n## [beyond] dns start")?;
+            for ele in r {
+                if !ele.ip.eq("-1") {
+                    writeln!(file, "{} {}", ele.ip, ele.host)?;
+                }
             }
+            writeln!(file, "## [beyond] dns end")?;
+        } else {
+            panic!("unsupport platform");
         }
-        writeln!(file, "## [beyond] dns end")?;
+
         Ok(())
     }
 }
 
 trait Detect {
-    fn execute(&self, str: &'static str) -> Result<NewHost<'static>>;
+    fn execute(&self, str: &str) -> Result<NewHost>;
 }
 
 struct Myssl {}
@@ -131,7 +141,7 @@ struct SubSub {
     records: Vec<Value>,
 }
 impl Detect for Myssl {
-    fn execute(&self, str: &'static str) -> Result<NewHost<'static>> {
+    fn execute(&self, str: &str) -> Result<NewHost> {
         let query = format!(
             "https://myssl.com/api/v1/tools/dns_query?qtype=1&host={}&qmode=-1",
             str
@@ -148,19 +158,29 @@ impl Detect for Myssl {
 
         let ip = answers[0].records[0]["value"].as_str().unwrap();
         println!("[{:?}],{},{}", std::thread::current().id(), &ip, &str);
-        Ok(NewHost::new(String::from(ip), str))
+        Ok(NewHost::new(ip, str))
     }
 }
 
-fn detect(host: &'static str) -> NewHost<'static> {
+fn detect(host: &str) -> NewHost {
     let m = Myssl {};
     let r = m.execute(host);
     match r {
         Ok(e) => e,
         Err(e) => {
             dbg!("{}", e);
-            NewHost::new(String::from("-1"), host)
+            NewHost::new("-1", host)
         }
+    }
+}
+
+fn get_host<'a>() -> Result<&'a str> {
+    if cfg!(unix) {
+        Ok("/etc/hosts")
+    } else if cfg!(windows) {
+        Ok("c:\\Windows\\System32\\Drivers\\etc\\hosts")
+    } else {
+        Err(anyhow::anyhow!("unknown host file"))
     }
 }
 
@@ -172,5 +192,11 @@ mod tests {
     fn test_detect() {
         let d = DnsOp {};
         d.execute().unwrap();
+    }
+
+    #[test]
+    fn test_host() {
+        let file = get_host();
+        assert!(file.is_ok())
     }
 }
