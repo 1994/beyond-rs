@@ -78,9 +78,6 @@ impl NewHost {
 pub struct DnsOp;
 
 impl Action for DnsOp {
-    fn check(&self) -> anyhow::Result<bool> {
-        Ok(true)
-    }
 
     fn execute(&self) -> anyhow::Result<()> {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -98,11 +95,14 @@ impl Action for DnsOp {
         let r: Vec<NewHost> = rx.into_iter().collect();
 
         if let Ok(host) = get_host() {
+
             let mut file = OpenOptions::new()
                 .read(true)
                 .write(true)
                 .append(true) // <--------- this
                 .open(host)?;
+
+            
 
             writeln!(file, "\n## [beyond] dns start")?;
             for ele in r {
