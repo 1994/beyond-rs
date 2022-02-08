@@ -19,4 +19,7 @@ b-core = {path = "./crates/b-core", version="0.0.0"}
 opt-level = 1
 
 [profile.release]
-opt-level = 3
+opt-level = 'z'     # Optimize for size.
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = 'abort'     # Abort on panic
